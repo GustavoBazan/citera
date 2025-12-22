@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "citera"
+version = "0.1.0"
+description = "Zero-friction CLI to create, promote, and manage code projects."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "glyph"}]
+
+[project.scripts]
+citera = "citera.cli:main"

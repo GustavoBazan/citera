@@ -1,116 +1,216 @@
-# project_manager
+# Citera
 
-**A zero-friction CLI tool to capture, evolve, and document your code projects — powered by AI and built for VS Code.**
+Citera is a zero-friction CLI that helps you create, promote, and organize code projects with AI-assisted metadata. It is built to keep experiments tidy, promote promising work into structured products, and automate the boring bits (naming, metadata, README generation, git setup, GitHub creation).
 
----
+## Overview
 
-## ✨ Why project_manager?
+Citera manages projects by maturity stage and category:
 
-- Create new projects instantly — no naming, no setup
-- Promote experiments into real projects with one command
-- Let AI generate names, tags, descriptions, README, and commit messages
-- Keep everything organized by intent (playground → incubator → product/tool)
-- Optional GitHub and Obsidian integration
+- playground: fast experiments
+- incubator: promising work-in-progress
+- products: versioned, long-term projects
+- tools: reusable utilities
+- archives: frozen/deprecated work
 
----
+When a project is promoted from playground to incubator, Citera triggers AI metadata generation to categorize, rename, and document the project automatically.
 
-## 🛠️ Features
+## Features
 
-- `project_manager new` — Start coding in <5 seconds
-- `project_manager promote` — Upgrade projects to serious mode
-- `project_manager describe` — Generate structured metadata using AI
-- `project_manager list` — Browse by stage or tag
-- `project_manager archive` — Clean up deprecated ideas
+- Create new projects in seconds
+- Promote projects to higher maturity stages
+- AI-generated metadata (name, description, tags, tech, category)
+- Category-based structure (e.g., incubator/AI/project-name)
+- README generation on promotion
+- Git initialization and GitHub repo creation (default on promote)
+- Obsidian note generation (optional)
 
----
+## Requirements
 
-## 🧠 Philosophy
+- Python 3.9+
+- A virtual environment is recommended (PEP 668 blocks system installs on Ubuntu)
+- Git (for repo initialization)
+- GitHub CLI (gh) if you want automatic GitHub repo creation
+- AI SDKs if you want OpenAI/Gemini integration:
+  - openai
+  - google-genai
 
-Organize by **maturity**, not mess.
+## Installation
 
-```
-~/Projects/
-├── playground/     # throwaway experiments
-├── incubator/      # promising WIPs
-├── products/       # real, versioned software
-├── tools/          # reusable scripts/utilities
-├── archives/       # frozen or deprecated
-└── _meta/          # Obsidian vault, templates, etc.
-
-````
-
----
-
-## 🚀 Getting Started
-
-Install:
+From the repository root:
 
 ```bash
-pip install project_manager
-````
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
 
-Start a new project:
+Install AI SDKs if you will use them:
 
 ```bash
-project_manager new --type playground
+pip install openai google-genai
 ```
 
-Then just open it in VS Code and go.
+## Configuration
 
----
+Config file:
 
-## ⚙️ Configuration
+```
+~/.config/citera/config.yaml
+```
 
-Default config file:
+Set provider and key:
 
 ```bash
-~/.config/project_manager/config.yaml
+citera set llm openai
+citera set llm_key sk-your-key
 ```
 
-Example:
+Or for Gemini:
 
-```yaml
-projects_root: ~/Projects
-default_stage: playground
-obsidian_enabled: true
-llm_provider: openai
-github_visibility: private
+```bash
+citera set llm gemini
+citera set llm_key ya29.your-gemini-key
 ```
 
----
+Optional model override:
 
-## 🤖 AI Metadata
+```bash
+citera set llm_model gpt-4o-mini
+citera set llm_model gemini-2.5-flash
+```
 
-AI generates:
+Projects root can be set via environment variable:
 
-* Project name (kebab-case)
-* Description (1 paragraph)
-* Tags (3–6)
-* Tech stack
-* README content
-* Git commit messages
+```bash
+export PROJECTS_DIRECTORY=~/Documents/Projects
+```
 
-All saved to `project.yaml`.
+If not set, Citera defaults to:
 
----
+```
+~/Documents/Projects/
+```
 
-## 🧩 Integrations
+## Project Structure
 
-* **GitHub**: `--git`, `--github` flags use `gh` CLI
-* **Obsidian**: Notes auto-generated into your vault with YAML frontmatter
+Citera creates and manages this structure automatically:
 
----
+```
+~/Documents/Projects/
+├── playground/
+├── incubator/
+│   └── AI/
+│       └── my-project
+├── products/
+│   └── CLIs/
+│       └── another-project
+├── tools/
+├── archives/
+```
 
-## 📅 Roadmap
+## Core Commands
 
-See [PROJECT_MANAGER_PRD.md](./PROJECT_MANAGER_PRD.md) for full development plan.
+### 1) Create a project
 
----
+```bash
+citera new --type playground
+```
 
-## 🙌 License
+Flags:
+- --type playground|incubator|product|tool (default: playground)
+- --lang python|js|rust (optional starter file)
+- --path /custom/base/path (optional)
+- --name CustomId1234 (optional)
+
+### 2) Describe a project (AI metadata)
+
+```bash
+citera describe
+```
+
+Flags:
+- --path /path/to/project (default: current directory)
+- --force (overwrite existing metadata fields)
+- --dry-run (print metadata only, do not write)
+
+### 3) Promote a project
+
+```bash
+citera promote --stage incubator
+```
+
+Flags:
+- --stage incubator|product|tool
+- --archive (moves project to archives)
+- --name "override-name" (overrides AI name)
+- --no-github (skip GitHub repo creation)
+- --git (force git init even without GitHub)
+- --obsidian (create an Obsidian note)
+- --dry-run (show actions without changes)
+- --path /path/to/project (optional)
+- --id ProjectId1234 (optional)
+
+Promotion behavior:
+- playground -> incubator triggers AI metadata generation
+- incubator -> product/tool requires existing metadata
+- README.md is created if missing (using AI description)
+- Initial commit is created and pushed when GitHub is enabled
+
+### 4) Set config values
+
+```bash
+citera set llm openai
+citera set llm_key sk-your-key
+citera set llm_model gpt-4o-mini
+```
+
+Valid keys:
+- llm (openai|gemini)
+- llm_key
+- llm_model
+
+### 5) List and archive (stubs for now)
+
+```bash
+citera list
+citera archive
+```
+
+## Recommended Usage Order
+
+1. Configure AI provider and key:
+   - citera set llm openai|gemini
+   - citera set llm_key <your-key>
+2. Create a project:
+   - citera new
+3. Work in the project.
+4. Promote when ready:
+   - citera promote --stage incubator --id <project-id>
+5. Optionally describe or re-describe:
+   - citera describe --force
+
+## Debugging and Troubleshooting
+
+- Use --dry-run on promote/describe to see actions without changes.
+- If GitHub creation fails:
+  - Ensure gh is installed and authenticated: gh auth login
+  - Use --no-github to skip GitHub creation
+- If git commit fails:
+  - Configure git user: git config --global user.name "You" and user.email
+- If AI fails or returns invalid JSON:
+  - Re-run with --dry-run to inspect response
+  - Verify llm and llm_key in config
+
+## Roadmap
+
+- Real AI metadata providers (OpenAI/Gemini) with better prompt tuning
+- Describe command improvements (more context signals, better summaries)
+- Full list/archive/promote workflows
+- GitHub issues + labels auto-generation
+- Obsidian templates and vault integration
+- Project templates per language or framework
+- CI setup automation
+
+## License
 
 MIT
-
----
-
-Built for myself. Designed for every dev who codes fast and forgets less.
