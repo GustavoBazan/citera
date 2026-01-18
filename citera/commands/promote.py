@@ -43,6 +43,17 @@ def _validate_stage_transition(current: str, target: str, archive: bool) -> None
         raise RuntimeError(f"{stage_label('archive')} projects cannot be promoted.")
 
 
+def _confirm_archive(project_id: str, target_label: str) -> bool:
+    prompt = f"Archive project '{project_id}' to {target_label}? [y/n]: "
+    while True:
+        response = input(prompt).strip().lower()
+        if response in ("y", "yes"):
+            return True
+        if response in ("n", "no"):
+            return False
+        print("Please enter y or n.")
+
+
 def _write_readme(
     project_path: Path,
     name: str | None,
@@ -96,6 +107,14 @@ def _git_has_changes(project_path: Path) -> bool:
     return bool(result.stdout.strip())
 
 
+def _truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() == "true"
+    return False
+
+
 def handle_promote(args: object) -> int:
     """Promote a project and update metadata."""
     if not args.archive and not args.stage:
@@ -130,11 +149,20 @@ def handle_promote(args: object) -> int:
             print(f"Unsupported target stage: {args.stage}", file=sys.stderr)
             return 2
         target_stage_label = stage_label(target_stage)
+    archive_requested = target_stage == "archive"
+    if current_stage == "archive" and archive_requested:
+        print(f"Project is already {stage_label('archive')}.", file=sys.stderr)
+        return 1
     try:
-        _validate_stage_transition(current_stage, target_stage, args.archive)
+        _validate_stage_transition(current_stage, target_stage, archive_requested)
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
+
+    if target_stage == "archive":
+        if not _confirm_archive(project_id, target_stage_label):
+            print("Archive cancelled.")
+            return 1
 
     base_path = base_projects_path()
     ensure_base_structure(base_path)
@@ -162,14 +190,18 @@ def handle_promote(args: object) -> int:
         name_source = args.name or ai_metadata["name"]
         new_project_id = slugify_repo_name(name_source)
     else:
-        category = normalize_category(existing.get("category"))
-        if not category:
+        raw_category = existing.get("category")
+        category = normalize_category(raw_category if isinstance(raw_category, str) else None)
+        if not category and target_stage != "archive":
             print("Missing category for promotion; run describe first.", file=sys.stderr)
             return 1
 
     stage_dir_path = base_path / stage_dir(target_stage)
 
-    destination = stage_dir_path / category / new_project_id
+    if category:
+        destination = stage_dir_path / category / new_project_id
+    else:
+        destination = stage_dir_path / new_project_id
     if destination.exists():
         print(f"Destination already exists: {destination}", file=sys.stderr)
         return 1
@@ -185,7 +217,10 @@ def handle_promote(args: object) -> int:
         use_description = existing.get("description")
         use_tags = existing.get("tags", [])
         use_tech = existing.get("tech", [])
-        use_category = category
+        if target_stage == "archive":
+            use_category = raw_category if isinstance(raw_category, str) else ""
+        else:
+            use_category = category or ""
 
     git_enabled = not args.no_github or args.git
     github_enabled = not args.no_github
@@ -193,6 +228,18 @@ def handle_promote(args: object) -> int:
     readme_created = False
     commit_created = False
     pushed = False
+
+    git_section = existing.get("git") if isinstance(existing.get("git"), dict) else {}
+    obsidian_section = (
+        existing.get("obsidian") if isinstance(existing.get("obsidian"), dict) else {}
+    )
+    existing_git_enabled = _truthy(git_section.get("enabled"))
+    existing_git_repo = str(git_section.get("repo") or "")
+    existing_obsidian_enabled = _truthy(obsidian_section.get("enabled"))
+
+    if target_stage == "archive":
+        git_enabled = False
+        github_enabled = False
 
     if args.dry_run:
         print(f"Old path: {project_path}")
@@ -254,6 +301,15 @@ def handle_promote(args: object) -> int:
         except subprocess.CalledProcessError:
             repo_url = ""
 
+    if target_stage == "archive":
+        metadata_git_enabled = existing_git_enabled
+        metadata_repo_url = existing_git_repo
+        metadata_obsidian_enabled = existing_obsidian_enabled
+    else:
+        metadata_git_enabled = git_enabled
+        metadata_repo_url = repo_url
+        metadata_obsidian_enabled = args.obsidian
+
     updated = {
         "id": new_project_id,
         "stage": target_stage_label,
@@ -263,21 +319,22 @@ def handle_promote(args: object) -> int:
         "tech": use_tech,
         "created_at": existing.get("created_at", datetime.now(timezone.utc).isoformat()),
         "category": use_category,
-        "git_enabled": git_enabled,
-        "git_repo": repo_url,
-        "obsidian_enabled": args.obsidian,
+        "git_enabled": metadata_git_enabled,
+        "git_repo": metadata_repo_url,
+        "obsidian_enabled": metadata_obsidian_enabled,
     }
     write_updated_metadata(destination / "project.yaml", updated)
 
-    readme_created = _write_readme(
-        destination,
-        use_name,
-        use_description,
-        use_tags or [],
-        use_tech or [],
-        use_category,
-        args.dry_run,
-    )
+    if not target_stage == "archive":
+        readme_created = _write_readme(
+            destination,
+            use_name,
+            use_description,
+            use_tags or [],
+            use_tech or [],
+            use_category,
+            args.dry_run,
+        )
 
     if args.obsidian:
         create_obsidian_note(destination, new_project_id, args.dry_run)

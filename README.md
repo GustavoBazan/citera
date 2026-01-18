@@ -109,8 +109,8 @@ CITERA_STAGE_PRODUCT=product
 CITERA_STAGE_DIR_PRODUCT="3- Products"
 CITERA_STAGE_TOOL=tool
 CITERA_STAGE_DIR_TOOL="4- Tools"
-CITERA_STAGE_ARCHIVE=archive
-CITERA_STAGE_DIR_ARCHIVE="9- Archive"
+CITERA_STAGE_ARCHIVE=archived
+CITERA_STAGE_DIR_ARCHIVE="9- Archived"
 ```
 
 ## Project Structure
@@ -158,11 +158,12 @@ Flags:
 
 ```bash
 citera promote --stage incubator
+citera promote --stage archived
 ```
 
 Flags:
-- --stage incubator|product|tool (configurable via .env)
-- --archive (moves project to archives)
+- --stage incubator|product|tool|archived (configurable via .env)
+- --archive (moves project to archives, prompts for confirmation)
 - --name "override-name" (overrides AI name)
 - --no-github (skip GitHub repo creation)
 - --git (force git init even without GitHub)
@@ -192,12 +193,15 @@ Valid keys:
 - llm_model
 - root
 
-### 5) List and archive (stubs for now)
+### 5) List (stub) and archive
 
 ```bash
 citera list
+citera archive --id ProjectId1234
 citera archive
 ```
+
+Archive commands will prompt for confirmation before moving a project.
 
 ## Recommended Usage Order
 

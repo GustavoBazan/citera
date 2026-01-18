@@ -13,7 +13,7 @@ DEFAULT_STAGE_NAMES = {
     "incubator": "incubator",
     "product": "product",
     "tool": "tool",
-    "archive": "archive",
+    "archive": "archived",
 }
 
 DEFAULT_STAGE_DIRS = {
