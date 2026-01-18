@@ -6,14 +6,27 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+from ..config import load_config
+
 
 def _candidate_env_paths() -> list[Path]:
     paths: list[Path] = []
+    # Lowest precedence defaults first; later entries override earlier ones.
+    package_root = Path(__file__).resolve().parents[2]
+    paths.append(package_root / ".env")
+    paths.append(Path.home() / ".config" / "citera" / ".env")
+    config_root = str(load_config().get("root", "")).strip()
+    if config_root:
+        paths.append(Path(config_root).expanduser() / ".env")
+    cwd = Path.cwd().resolve()
+    # Load from nearest .env up the tree so project-local settings apply when run inside subfolders.
+    parent_chain = list(reversed(cwd.parents)) + [cwd]
+    for parent in parent_chain:
+        paths.append(parent / ".env")
     override = os.environ.get("CITERA_ENV_PATH")
     if override:
+        # Keep explicit override last so it wins over other sources.
         paths.append(Path(override).expanduser())
-    paths.append(Path.home() / ".config" / "citera" / ".env")
-    paths.append(Path.cwd() / ".env")
     return paths
 
 

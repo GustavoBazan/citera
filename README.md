@@ -30,25 +30,37 @@ When a project is promoted from playground to incubator, Citera triggers AI meta
 - A virtual environment is recommended (PEP 668 blocks system installs on Ubuntu)
 - Git (for repo initialization)
 - GitHub CLI (gh) if you want automatic GitHub repo creation
-- AI SDKs if you want OpenAI/Gemini integration:
-  - openai
-  - google-genai
+- AI SDKs are installed by default (openai, google-genai)
 
 ## Installation
 
 From the repository root:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
 
-Install AI SDKs if you will use them:
+### Install Globally (no venv)
+
+Recommended with pipx:
 
 ```bash
-pip install openai google-genai
+sudo apt install pipx
+pipx ensurepath
+pipx install -e /path/to/citera
 ```
+
+User install with pip:
+
+```bash
+python3 -m pip install --user -e /path/to/citera
+```
+
+Notes:
+- If you install with `-e`, code changes take effect immediately; reinstall only when dependencies change.
+- If `citera` is not found, ensure `~/.local/bin` is on your PATH.
 
 ## Configuration
 
@@ -157,12 +169,13 @@ Flags:
 ### 3) Promote a project
 
 ```bash
+citera promote
 citera promote --stage incubator
 citera promote --stage archived
 ```
 
 Flags:
-- --stage incubator|product|tool|archived (configurable via .env)
+- --stage incubator|product|tool|archived (configurable via .env; defaults to next stage)
 - --archive (moves project to archives, prompts for confirmation)
 - --name "override-name" (overrides AI name)
 - --no-github (skip GitHub repo creation)

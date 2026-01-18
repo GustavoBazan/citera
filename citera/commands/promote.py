@@ -54,6 +54,16 @@ def _confirm_archive(project_id: str, target_label: str) -> bool:
         print("Please enter y or n.")
 
 
+def _default_target_stage(current: str) -> str | None:
+    if current == "playground":
+        return "incubator"
+    if current == "incubator":
+        return "product"
+    if current in ("product", "tool"):
+        return "archive"
+    return None
+
+
 def _write_readme(
     project_path: Path,
     name: str | None,
@@ -117,10 +127,6 @@ def _truthy(value: object) -> bool:
 
 def handle_promote(args: object) -> int:
     """Promote a project and update metadata."""
-    if not args.archive and not args.stage:
-        print("Missing required --stage (or use --archive).", file=sys.stderr)
-        return 2
-
     try:
         project_path = resolve_project_path(getattr(args, "path", None), getattr(args, "id", None))
     except RuntimeError as exc:
@@ -144,10 +150,16 @@ def handle_promote(args: object) -> int:
         target_stage = "archive"
         target_stage_label = stage_label("archive")
     else:
-        target_stage = stage_role_from_label(str(args.stage))
-        if not target_stage:
-            print(f"Unsupported target stage: {args.stage}", file=sys.stderr)
-            return 2
+        if args.stage:
+            target_stage = stage_role_from_label(str(args.stage))
+            if not target_stage:
+                print(f"Unsupported target stage: {args.stage}", file=sys.stderr)
+                return 2
+        else:
+            target_stage = _default_target_stage(current_stage)
+            if not target_stage:
+                print(f"Project is already {stage_label('archive')}.", file=sys.stderr)
+                return 1
         target_stage_label = stage_label(target_stage)
     archive_requested = target_stage == "archive"
     if current_stage == "archive" and archive_requested:

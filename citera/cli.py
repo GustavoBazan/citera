@@ -55,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     promote_parser.add_argument(
         "--stage",
         choices=stage_choices(include_archive=True, include_roles=True),
-        help="Target stage for promotion.",
+        help="Target stage for promotion (defaults to the next stage).",
     )
     promote_parser.add_argument(
         "--name",
