@@ -6,11 +6,12 @@ import argparse
 from typing import Iterable
 
 from . import __version__
+from .commands.archive import handle_archive
 from .commands.describe import handle_describe
 from .commands.new import handle_new
 from .commands.promote import handle_promote
 from .commands.set import handle_set
-from .core.constants import STAGE_DIRS
+from .core.constants import stage_choices, stage_label
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,17 +38,13 @@ def build_parser() -> argparse.ArgumentParser:
     new_parser = subparsers.add_parser("new", help="Create a new project.")
     new_parser.add_argument(
         "--type",
-        choices=sorted(STAGE_DIRS.keys()),
-        default="playground",
+        choices=stage_choices(include_archive=False, include_roles=True),
+        default=stage_label("playground"),
         help="Stage for the new project.",
     )
     new_parser.add_argument(
         "--lang",
         help="Optional language starter (python, js, rust).",
-    )
-    new_parser.add_argument(
-        "--path",
-        help="Override the projects base directory.",
     )
     new_parser.add_argument(
         "--name",
@@ -57,8 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
     promote_parser = subparsers.add_parser("promote", help="Promote a project stage.")
     promote_parser.add_argument(
         "--stage",
-        choices=sorted(STAGE_DIRS.keys()),
-        help="Target stage for promotion.",
+        choices=stage_choices(include_archive=True, include_roles=True),
+        help="Target stage for promotion (defaults to the next stage).",
     )
     promote_parser.add_argument(
         "--name",
@@ -82,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     promote_parser.add_argument(
         "--archive",
         action="store_true",
-        help="Archive the project.",
+        help="Archive the project (alias for --stage archived).",
     )
     promote_parser.add_argument(
         "--dry-run",
@@ -118,7 +115,20 @@ def build_parser() -> argparse.ArgumentParser:
     set_parser.add_argument("value", help="Config value.")
 
     subparsers.add_parser("list", help="List projects by stage or tag.")
-    subparsers.add_parser("archive", help="Archive a project.")
+    archive_parser = subparsers.add_parser("archive", help="Archive a project.")
+    archive_parser.add_argument(
+        "--path",
+        help="Path to the project directory (defaults to cwd).",
+    )
+    archive_parser.add_argument(
+        "--id",
+        help="Project id to locate within the projects directory.",
+    )
+    archive_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print actions without making changes.",
+    )
     return parser
 
 
@@ -151,6 +161,8 @@ def _handle_command(args: argparse.Namespace) -> int:
         return handle_describe(args)
     if args.command == "set":
         return handle_set(args)
+    if args.command == "archive":
+        return handle_archive(args)
     if args.command is None:
         return 0
     print(
