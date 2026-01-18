@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -19,6 +21,17 @@ def _create_starter_file(project_path: Path, lang: str | None) -> None:
         return
     filename, content = starter
     (project_path / filename).write_text(content, encoding="utf-8")
+
+
+def _open_in_vscode(project_path: Path) -> None:
+    code_path = shutil.which("code")
+    if not code_path:
+        print("VS Code 'code' command not found on PATH; skipping open.", file=sys.stderr)
+        return
+    try:
+        subprocess.Popen([code_path, "."], cwd=project_path)
+    except OSError as exc:
+        print(f"Failed to launch VS Code: {exc}", file=sys.stderr)
 
 
 def handle_new(args: object) -> int:
@@ -40,4 +53,5 @@ def handle_new(args: object) -> int:
     write_project_metadata(project_path, project_id, args.type)
     _create_starter_file(project_path, args.lang)
     print(project_path.resolve())
+    _open_in_vscode(project_path)
     return 0
