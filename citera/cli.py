@@ -10,7 +10,7 @@ from .commands.describe import handle_describe
 from .commands.new import handle_new
 from .commands.promote import handle_promote
 from .commands.set import handle_set
-from .core.constants import STAGE_DIRS
+from .core.constants import stage_choices, stage_label
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,17 +37,13 @@ def build_parser() -> argparse.ArgumentParser:
     new_parser = subparsers.add_parser("new", help="Create a new project.")
     new_parser.add_argument(
         "--type",
-        choices=sorted(STAGE_DIRS.keys()),
-        default="playground",
+        choices=stage_choices(include_archive=False, include_roles=True),
+        default=stage_label("playground"),
         help="Stage for the new project.",
     )
     new_parser.add_argument(
         "--lang",
         help="Optional language starter (python, js, rust).",
-    )
-    new_parser.add_argument(
-        "--path",
-        help="Override the projects base directory.",
     )
     new_parser.add_argument(
         "--name",
@@ -57,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     promote_parser = subparsers.add_parser("promote", help="Promote a project stage.")
     promote_parser.add_argument(
         "--stage",
-        choices=sorted(STAGE_DIRS.keys()),
+        choices=stage_choices(include_archive=False, include_roles=True),
         help="Target stage for promotion.",
     )
     promote_parser.add_argument(

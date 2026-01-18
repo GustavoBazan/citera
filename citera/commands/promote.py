@@ -12,7 +12,7 @@ from ..ai.client import build_client
 from ..config import load_config
 from ..core.actions import create_obsidian_note, run_command, slugify_repo_name
 from ..core.context import collect_project_context
-from ..core.constants import ARCHIVE_DIR, STAGE_DIRS
+from ..core.constants import stage_dir, stage_label, stage_role_from_label
 from ..core.metadata import (
     normalize_category,
     parse_project_metadata,
@@ -26,13 +26,21 @@ def _validate_stage_transition(current: str, target: str, archive: bool) -> None
     if archive:
         return
     if current == "playground" and target != "incubator":
-        raise RuntimeError("playground projects can only be promoted to incubator.")
+        raise RuntimeError(
+            f"{stage_label('playground')} projects can only be promoted to "
+            f"{stage_label('incubator')}."
+        )
     if current == "incubator" and target not in ("product", "tool"):
-        raise RuntimeError("incubator projects can only be promoted to product or tool.")
+        raise RuntimeError(
+            f"{stage_label('incubator')} projects can only be promoted to "
+            f"{stage_label('product')} or {stage_label('tool')}."
+        )
     if current in ("product", "tool") and target != "archive":
-        raise RuntimeError("product/tool projects can only be archived.")
+        raise RuntimeError(
+            f"{stage_label('product')}/{stage_label('tool')} projects can only be archived."
+        )
     if current == "archive":
-        raise RuntimeError("archive projects cannot be promoted.")
+        raise RuntimeError(f"{stage_label('archive')} projects cannot be promoted.")
 
 
 def _write_readme(
@@ -107,16 +115,28 @@ def handle_promote(args: object) -> int:
 
     existing = parse_project_metadata(project_yaml)
     project_id = str(existing.get("id", project_path.name))
-    current_stage = str(existing.get("stage", "playground"))
+    current_stage_label = str(existing.get("stage", stage_label("playground")))
+    current_stage = stage_role_from_label(current_stage_label)
+    if not current_stage:
+        print(f"Unknown stage in project.yaml: {current_stage_label}", file=sys.stderr)
+        return 1
 
-    target_stage = "archive" if args.archive else args.stage
+    if args.archive:
+        target_stage = "archive"
+        target_stage_label = stage_label("archive")
+    else:
+        target_stage = stage_role_from_label(str(args.stage))
+        if not target_stage:
+            print(f"Unsupported target stage: {args.stage}", file=sys.stderr)
+            return 2
+        target_stage_label = stage_label(target_stage)
     try:
         _validate_stage_transition(current_stage, target_stage, args.archive)
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
-    base_path = base_projects_path(None)
+    base_path = base_projects_path()
     ensure_base_structure(base_path)
 
     ai_metadata: dict | None = None
@@ -147,12 +167,9 @@ def handle_promote(args: object) -> int:
             print("Missing category for promotion; run describe first.", file=sys.stderr)
             return 1
 
-    if target_stage == "archive":
-        stage_dir = base_path / ARCHIVE_DIR
-    else:
-        stage_dir = base_path / STAGE_DIRS[target_stage]
+    stage_dir_path = base_path / stage_dir(target_stage)
 
-    destination = stage_dir / category / new_project_id
+    destination = stage_dir_path / category / new_project_id
     if destination.exists():
         print(f"Destination already exists: {destination}", file=sys.stderr)
         return 1
@@ -180,7 +197,7 @@ def handle_promote(args: object) -> int:
     if args.dry_run:
         print(f"Old path: {project_path}")
         print(f"New path: {destination}")
-        print(f"Metadata changes: stage={target_stage}, name={use_name}, category={use_category}")
+        print(f"Metadata changes: stage={target_stage_label}, name={use_name}, category={use_category}")
         print(f"Git: {'init' if git_enabled else 'skip'}")
         print(f"GitHub: {'create' if github_enabled else 'skip'}")
         if git_enabled:
@@ -239,7 +256,7 @@ def handle_promote(args: object) -> int:
 
     updated = {
         "id": new_project_id,
-        "stage": target_stage,
+        "stage": target_stage_label,
         "name": use_name,
         "description": use_description,
         "tags": use_tags,
@@ -289,7 +306,7 @@ def handle_promote(args: object) -> int:
             print("Git push failed. Check your credentials or remote.", file=sys.stderr)
             return 1
 
-    print(f"✓ Project promoted to: {target_stage}")
+    print(f"✓ Project promoted to: {target_stage_label}")
     print(f"✓ Category: {use_category}")
     print(f"✓ New path: {destination}")
     if git_enabled:

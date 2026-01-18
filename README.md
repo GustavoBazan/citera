@@ -79,7 +79,13 @@ citera set llm_model gpt-4o-mini
 citera set llm_model gemini-2.5-flash
 ```
 
-Projects root can be set via environment variable:
+Projects root can be set via config:
+
+```bash
+citera set root ~/Documents/Projects
+```
+
+If not set, Citera will use this environment variable if present:
 
 ```bash
 export PROJECTS_DIRECTORY=~/Documents/Projects
@@ -91,9 +97,25 @@ If not set, Citera defaults to:
 ~/Documents/Projects/
 ```
 
+Stage names and folders can be customized via `.env`:
+
+```bash
+# ~/.config/citera/.env or .env in your working directory
+CITERA_STAGE_PLAYGROUND=sandbox
+CITERA_STAGE_DIR_PLAYGROUND="1- Sandbox"
+CITERA_STAGE_INCUBATOR=develop
+CITERA_STAGE_DIR_INCUBATOR="2- Develop"
+CITERA_STAGE_PRODUCT=product
+CITERA_STAGE_DIR_PRODUCT="3- Products"
+CITERA_STAGE_TOOL=tool
+CITERA_STAGE_DIR_TOOL="4- Tools"
+CITERA_STAGE_ARCHIVE=archive
+CITERA_STAGE_DIR_ARCHIVE="9- Archive"
+```
+
 ## Project Structure
 
-Citera creates and manages this structure automatically:
+Citera creates and manages this structure automatically (defaults shown):
 
 ```
 ~/Documents/Projects/
@@ -117,9 +139,8 @@ citera new --type playground
 ```
 
 Flags:
-- --type playground|incubator|product|tool (default: playground)
+- --type playground|incubator|product|tool (default: playground; configurable via .env)
 - --lang python|js|rust (optional starter file)
-- --path /custom/base/path (optional)
 - --name CustomId1234 (optional)
 
 ### 2) Describe a project (AI metadata)
@@ -140,7 +161,7 @@ citera promote --stage incubator
 ```
 
 Flags:
-- --stage incubator|product|tool
+- --stage incubator|product|tool (configurable via .env)
 - --archive (moves project to archives)
 - --name "override-name" (overrides AI name)
 - --no-github (skip GitHub repo creation)
@@ -162,12 +183,14 @@ Promotion behavior:
 citera set llm openai
 citera set llm_key sk-your-key
 citera set llm_model gpt-4o-mini
+citera set root ~/Documents/Projects
 ```
 
 Valid keys:
 - llm (openai|gemini)
 - llm_key
 - llm_model
+- root
 
 ### 5) List and archive (stubs for now)
 

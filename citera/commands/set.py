@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from ..config import set_config_value
 
-VALID_KEYS = {"llm", "llm_key", "llm_model"}
+VALID_KEYS = {"llm", "llm_key", "llm_model", "root"}
 VALID_LLMS = {"openai", "gemini"}
 
 
@@ -26,6 +27,11 @@ def handle_set(args: object) -> int:
     if key == "llm_key" and not value:
         print("llm_key cannot be empty.", file=sys.stderr)
         return 1
+    if key == "root":
+        if not value:
+            print("root cannot be empty.", file=sys.stderr)
+            return 1
+        value = str(Path(value).expanduser())
     set_config_value(key, value)
     print(f"✓ {key} updated.")
     return 0
