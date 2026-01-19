@@ -7,7 +7,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..core.constants import LANG_STARTERS, stage_dir, stage_label, stage_role_from_label
+from ..core.constants import (
+    CORE_STAGE_ROLES,
+    LANG_STARTERS,
+    stage_dir,
+    stage_label,
+    stage_role_from_label,
+)
 from ..core.ids import generate_project_id
 from ..core.metadata import write_project_metadata
 from ..core.paths import base_projects_path, ensure_base_structure
@@ -39,7 +45,7 @@ def handle_new(args: object) -> int:
     base_path = base_projects_path()
     ensure_base_structure(base_path)
     stage_role = stage_role_from_label(str(args.type))
-    if not stage_role or stage_role == "archive":
+    if not stage_role or stage_role not in CORE_STAGE_ROLES:
         print(f"Unsupported stage: {args.type}", file=sys.stderr)
         return 2
     stage_dir_path = base_path / stage_dir(stage_role)

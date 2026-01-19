@@ -12,7 +12,13 @@ from ..ai.client import build_client
 from ..config import load_config
 from ..core.actions import create_obsidian_note, run_command, slugify_repo_name
 from ..core.context import collect_project_context
-from ..core.constants import stage_dir, stage_label, stage_role_from_label
+from ..core.constants import (
+    CORE_STAGE_ROLES,
+    SPECIAL_STAGE_ROLES,
+    stage_dir,
+    stage_label,
+    stage_role_from_label,
+)
 from ..core.metadata import (
     normalize_category,
     parse_project_metadata,
@@ -25,22 +31,29 @@ from ..core.validation import validate_ai_payload
 def _validate_stage_transition(current: str, target: str, archive: bool) -> None:
     if archive:
         return
-    if current == "playground" and target != "incubator":
+    if target in SPECIAL_STAGE_ROLES:
+        return
+    if current in SPECIAL_STAGE_ROLES:
+        if target in CORE_STAGE_ROLES:
+            return
+        if target in SPECIAL_STAGE_ROLES:
+            return
+        raise RuntimeError(f"Unsupported target stage: {target}.")
+    if current == "sandbox" and target != "develop":
         raise RuntimeError(
-            f"{stage_label('playground')} projects can only be promoted to "
-            f"{stage_label('incubator')}."
+            f"{stage_label('sandbox')} projects can only be promoted to "
+            f"{stage_label('develop')}."
         )
-    if current == "incubator" and target not in ("product", "tool"):
+    if current == "develop" and target != "product":
         raise RuntimeError(
-            f"{stage_label('incubator')} projects can only be promoted to "
-            f"{stage_label('product')} or {stage_label('tool')}."
+            f"{stage_label('develop')} projects can only be promoted to "
+            f"{stage_label('product')}."
         )
-    if current in ("product", "tool") and target != "archive":
+    if current == "product":
         raise RuntimeError(
-            f"{stage_label('product')}/{stage_label('tool')} projects can only be archived."
+            f"{stage_label('product')} projects can only be moved to "
+            f"{stage_label('resources')} or {stage_label('archive')}."
         )
-    if current == "archive":
-        raise RuntimeError(f"{stage_label('archive')} projects cannot be promoted.")
 
 
 def _confirm_archive(project_id: str, target_label: str) -> bool:
@@ -55,12 +68,10 @@ def _confirm_archive(project_id: str, target_label: str) -> bool:
 
 
 def _default_target_stage(current: str) -> str | None:
-    if current == "playground":
-        return "incubator"
-    if current == "incubator":
+    if current == "sandbox":
+        return "develop"
+    if current == "develop":
         return "product"
-    if current in ("product", "tool"):
-        return "archive"
     return None
 
 
@@ -140,7 +151,7 @@ def handle_promote(args: object) -> int:
 
     existing = parse_project_metadata(project_yaml)
     project_id = str(existing.get("id", project_path.name))
-    current_stage_label = str(existing.get("stage", stage_label("playground")))
+    current_stage_label = str(existing.get("stage", stage_label("sandbox")))
     current_stage = stage_role_from_label(current_stage_label)
     if not current_stage:
         print(f"Unknown stage in project.yaml: {current_stage_label}", file=sys.stderr)
@@ -158,7 +169,10 @@ def handle_promote(args: object) -> int:
         else:
             target_stage = _default_target_stage(current_stage)
             if not target_stage:
-                print(f"Project is already {stage_label('archive')}.", file=sys.stderr)
+                print(
+                    f"No default promotion from {stage_label(current_stage)}; use --stage.",
+                    file=sys.stderr,
+                )
                 return 1
         target_stage_label = stage_label(target_stage)
     archive_requested = target_stage == "archive"
@@ -183,7 +197,7 @@ def handle_promote(args: object) -> int:
     category: str | None = None
     new_project_id = project_id
 
-    if current_stage == "playground" and target_stage == "incubator":
+    if current_stage == "sandbox" and target_stage == "develop":
         context = collect_project_context(project_path)
         config = load_config()
         try:

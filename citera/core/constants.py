@@ -4,27 +4,25 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from .env import get_env_value
+CORE_STAGE_ROLES = ("sandbox", "develop", "product")
+SPECIAL_STAGE_ROLES = ("resources", "archived")
+STAGE_ROLES = CORE_STAGE_ROLES + SPECIAL_STAGE_ROLES
 
-DEFAULT_STAGE_ROLES = ("playground", "incubator", "product", "tool", "archive")
-
-DEFAULT_STAGE_NAMES = {
-    "playground": "playground",
-    "incubator": "incubator",
-    "product": "product",
-    "tool": "tool",
-    "archive": "archived",
+STAGE_NAMES = {
+    "sandbox": "Sandbox",
+    "develop": "Develop",
+    "product": "Product",
+    "resources": "Resources",
+    "archived": "Archived",
 }
 
-DEFAULT_STAGE_DIRS = {
-    "playground": "playground",
-    "incubator": "incubator",
-    "product": "products",
-    "tool": "tools",
-    "archive": "archives",
+STAGE_DIRS = {
+    "sandbox": "1- Sandbox",
+    "develop": "2- Develop",
+    "product": "3- Products",
+    "resources": "Resources",
+    "archived": "Archived",
 }
-
-STAGE_DIRS = dict(DEFAULT_STAGE_DIRS)
 
 CATEGORY_CHOICES = {
     "games": "Games",
@@ -83,27 +81,16 @@ LANG_STARTERS = {
     "rust": ("main.rs", "fn main() {\n    println!(\"Hello from citera\");\n}\n"),
 }
 
-
 @lru_cache
 def stage_names() -> dict[str, str]:
     """Return configured stage labels by role."""
-    names = dict(DEFAULT_STAGE_NAMES)
-    for role in DEFAULT_STAGE_ROLES:
-        value = get_env_value(f"CITERA_STAGE_{role.upper()}")
-        if value:
-            names[role] = value.strip()
-    return names
+    return dict(STAGE_NAMES)
 
 
 @lru_cache
 def stage_dirs() -> dict[str, str]:
     """Return configured stage directories by role."""
-    dirs = dict(DEFAULT_STAGE_DIRS)
-    for role in DEFAULT_STAGE_ROLES:
-        value = get_env_value(f"CITERA_STAGE_DIR_{role.upper()}")
-        if value:
-            dirs[role] = value.strip()
-    return dirs
+    return dict(STAGE_DIRS)
 
 
 def stage_label(role: str) -> str:
@@ -115,17 +102,16 @@ def stage_dir(role: str) -> str:
 
 
 def stage_roles(include_archive: bool = False) -> list[str]:
-    roles = list(DEFAULT_STAGE_ROLES)
-    if not include_archive:
-        roles = [role for role in roles if role != "archive"]
-    return roles
+    if include_archive:
+        return list(STAGE_ROLES)
+    return list(CORE_STAGE_ROLES)
 
 
 def stage_role_from_label(label: str) -> str | None:
     if not label:
         return None
     normalized = label.strip().lower()
-    if normalized in DEFAULT_STAGE_ROLES:
+    if normalized in STAGE_ROLES:
         return normalized
     for role, name in stage_names().items():
         if normalized == name.strip().lower():

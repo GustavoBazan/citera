@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     new_parser.add_argument(
         "--type",
         choices=stage_choices(include_archive=False, include_roles=True),
-        default=stage_label("playground"),
+        default=stage_label("sandbox"),
         help="Stage for the new project.",
     )
     new_parser.add_argument(
