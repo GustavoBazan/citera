@@ -12,7 +12,7 @@ from ..ai.client import build_client
 from ..config import load_config
 from ..core.actions import create_obsidian_note, run_command, slugify_repo_name
 from ..core.context import collect_project_context
-from ..core.constants import ARCHIVE_DIR, STAGE_DIRS
+from ..core.constants import stage_dir, stage_label, stage_role_from_label
 from ..core.metadata import (
     normalize_category,
     parse_project_metadata,
@@ -26,13 +26,42 @@ def _validate_stage_transition(current: str, target: str, archive: bool) -> None
     if archive:
         return
     if current == "playground" and target != "incubator":
-        raise RuntimeError("playground projects can only be promoted to incubator.")
+        raise RuntimeError(
+            f"{stage_label('playground')} projects can only be promoted to "
+            f"{stage_label('incubator')}."
+        )
     if current == "incubator" and target not in ("product", "tool"):
-        raise RuntimeError("incubator projects can only be promoted to product or tool.")
+        raise RuntimeError(
+            f"{stage_label('incubator')} projects can only be promoted to "
+            f"{stage_label('product')} or {stage_label('tool')}."
+        )
     if current in ("product", "tool") and target != "archive":
-        raise RuntimeError("product/tool projects can only be archived.")
+        raise RuntimeError(
+            f"{stage_label('product')}/{stage_label('tool')} projects can only be archived."
+        )
     if current == "archive":
-        raise RuntimeError("archive projects cannot be promoted.")
+        raise RuntimeError(f"{stage_label('archive')} projects cannot be promoted.")
+
+
+def _confirm_archive(project_id: str, target_label: str) -> bool:
+    prompt = f"Archive project '{project_id}' to {target_label}? [y/n]: "
+    while True:
+        response = input(prompt).strip().lower()
+        if response in ("y", "yes"):
+            return True
+        if response in ("n", "no"):
+            return False
+        print("Please enter y or n.")
+
+
+def _default_target_stage(current: str) -> str | None:
+    if current == "playground":
+        return "incubator"
+    if current == "incubator":
+        return "product"
+    if current in ("product", "tool"):
+        return "archive"
+    return None
 
 
 def _write_readme(
@@ -88,12 +117,16 @@ def _git_has_changes(project_path: Path) -> bool:
     return bool(result.stdout.strip())
 
 
+def _truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() == "true"
+    return False
+
+
 def handle_promote(args: object) -> int:
     """Promote a project and update metadata."""
-    if not args.archive and not args.stage:
-        print("Missing required --stage (or use --archive).", file=sys.stderr)
-        return 2
-
     try:
         project_path = resolve_project_path(getattr(args, "path", None), getattr(args, "id", None))
     except RuntimeError as exc:
@@ -107,16 +140,43 @@ def handle_promote(args: object) -> int:
 
     existing = parse_project_metadata(project_yaml)
     project_id = str(existing.get("id", project_path.name))
-    current_stage = str(existing.get("stage", "playground"))
+    current_stage_label = str(existing.get("stage", stage_label("playground")))
+    current_stage = stage_role_from_label(current_stage_label)
+    if not current_stage:
+        print(f"Unknown stage in project.yaml: {current_stage_label}", file=sys.stderr)
+        return 1
 
-    target_stage = "archive" if args.archive else args.stage
+    if args.archive:
+        target_stage = "archive"
+        target_stage_label = stage_label("archive")
+    else:
+        if args.stage:
+            target_stage = stage_role_from_label(str(args.stage))
+            if not target_stage:
+                print(f"Unsupported target stage: {args.stage}", file=sys.stderr)
+                return 2
+        else:
+            target_stage = _default_target_stage(current_stage)
+            if not target_stage:
+                print(f"Project is already {stage_label('archive')}.", file=sys.stderr)
+                return 1
+        target_stage_label = stage_label(target_stage)
+    archive_requested = target_stage == "archive"
+    if current_stage == "archive" and archive_requested:
+        print(f"Project is already {stage_label('archive')}.", file=sys.stderr)
+        return 1
     try:
-        _validate_stage_transition(current_stage, target_stage, args.archive)
+        _validate_stage_transition(current_stage, target_stage, archive_requested)
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
-    base_path = base_projects_path(None)
+    if target_stage == "archive":
+        if not _confirm_archive(project_id, target_stage_label):
+            print("Archive cancelled.")
+            return 1
+
+    base_path = base_projects_path()
     ensure_base_structure(base_path)
 
     ai_metadata: dict | None = None
@@ -142,17 +202,18 @@ def handle_promote(args: object) -> int:
         name_source = args.name or ai_metadata["name"]
         new_project_id = slugify_repo_name(name_source)
     else:
-        category = normalize_category(existing.get("category"))
-        if not category:
+        raw_category = existing.get("category")
+        category = normalize_category(raw_category if isinstance(raw_category, str) else None)
+        if not category and target_stage != "archive":
             print("Missing category for promotion; run describe first.", file=sys.stderr)
             return 1
 
-    if target_stage == "archive":
-        stage_dir = base_path / ARCHIVE_DIR
-    else:
-        stage_dir = base_path / STAGE_DIRS[target_stage]
+    stage_dir_path = base_path / stage_dir(target_stage)
 
-    destination = stage_dir / category / new_project_id
+    if category:
+        destination = stage_dir_path / category / new_project_id
+    else:
+        destination = stage_dir_path / new_project_id
     if destination.exists():
         print(f"Destination already exists: {destination}", file=sys.stderr)
         return 1
@@ -168,7 +229,10 @@ def handle_promote(args: object) -> int:
         use_description = existing.get("description")
         use_tags = existing.get("tags", [])
         use_tech = existing.get("tech", [])
-        use_category = category
+        if target_stage == "archive":
+            use_category = raw_category if isinstance(raw_category, str) else ""
+        else:
+            use_category = category or ""
 
     git_enabled = not args.no_github or args.git
     github_enabled = not args.no_github
@@ -177,10 +241,22 @@ def handle_promote(args: object) -> int:
     commit_created = False
     pushed = False
 
+    git_section = existing.get("git") if isinstance(existing.get("git"), dict) else {}
+    obsidian_section = (
+        existing.get("obsidian") if isinstance(existing.get("obsidian"), dict) else {}
+    )
+    existing_git_enabled = _truthy(git_section.get("enabled"))
+    existing_git_repo = str(git_section.get("repo") or "")
+    existing_obsidian_enabled = _truthy(obsidian_section.get("enabled"))
+
+    if target_stage == "archive":
+        git_enabled = False
+        github_enabled = False
+
     if args.dry_run:
         print(f"Old path: {project_path}")
         print(f"New path: {destination}")
-        print(f"Metadata changes: stage={target_stage}, name={use_name}, category={use_category}")
+        print(f"Metadata changes: stage={target_stage_label}, name={use_name}, category={use_category}")
         print(f"Git: {'init' if git_enabled else 'skip'}")
         print(f"GitHub: {'create' if github_enabled else 'skip'}")
         if git_enabled:
@@ -237,30 +313,40 @@ def handle_promote(args: object) -> int:
         except subprocess.CalledProcessError:
             repo_url = ""
 
+    if target_stage == "archive":
+        metadata_git_enabled = existing_git_enabled
+        metadata_repo_url = existing_git_repo
+        metadata_obsidian_enabled = existing_obsidian_enabled
+    else:
+        metadata_git_enabled = git_enabled
+        metadata_repo_url = repo_url
+        metadata_obsidian_enabled = args.obsidian
+
     updated = {
         "id": new_project_id,
-        "stage": target_stage,
+        "stage": target_stage_label,
         "name": use_name,
         "description": use_description,
         "tags": use_tags,
         "tech": use_tech,
         "created_at": existing.get("created_at", datetime.now(timezone.utc).isoformat()),
         "category": use_category,
-        "git_enabled": git_enabled,
-        "git_repo": repo_url,
-        "obsidian_enabled": args.obsidian,
+        "git_enabled": metadata_git_enabled,
+        "git_repo": metadata_repo_url,
+        "obsidian_enabled": metadata_obsidian_enabled,
     }
     write_updated_metadata(destination / "project.yaml", updated)
 
-    readme_created = _write_readme(
-        destination,
-        use_name,
-        use_description,
-        use_tags or [],
-        use_tech or [],
-        use_category,
-        args.dry_run,
-    )
+    if not target_stage == "archive":
+        readme_created = _write_readme(
+            destination,
+            use_name,
+            use_description,
+            use_tags or [],
+            use_tech or [],
+            use_category,
+            args.dry_run,
+        )
 
     if args.obsidian:
         create_obsidian_note(destination, new_project_id, args.dry_run)
@@ -289,7 +375,7 @@ def handle_promote(args: object) -> int:
             print("Git push failed. Check your credentials or remote.", file=sys.stderr)
             return 1
 
-    print(f"✓ Project promoted to: {target_stage}")
+    print(f"✓ Project promoted to: {target_stage_label}")
     print(f"✓ Category: {use_category}")
     print(f"✓ New path: {destination}")
     if git_enabled:

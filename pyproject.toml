@@ -4,12 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "citera"
-version = "0.1.0"
+version = "0.2.1"
 description = "Zero-friction CLI to create, promote, and manage code projects."
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [{name = "glyph"}]
+dependencies = [
+    "google-genai",
+    "openai",
+]
 
 [project.scripts]
 citera = "citera.cli:main"
